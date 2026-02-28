@@ -35,7 +35,7 @@ export default function CatalogoCultivos() {
 
   // 🔹 Cargar cultivos
   const cargarCultivos = async () => {
-    const res = await fetch("http://127.0.0.1:8000/api/cultivos/");
+    const res = await fetch(`${API}/cultivos/`);
     const data = await res.json();
     setCultivos(data);
   };
@@ -56,7 +56,7 @@ export default function CatalogoCultivos() {
     formDataToSend.append("imagen", imagen);
   }
 
-  const res = await fetch("http://127.0.0.1:8000/api/cultivos/", {
+  const res = await fetch(`${API}/cultivos/`, {
     method: "POST",
     body: formDataToSend,
   });
@@ -82,7 +82,7 @@ export default function CatalogoCultivos() {
 
   // 🔹 Eliminar cultivo
   const eliminarCultivo = async (id) => {
-    await fetch(`http://127.0.0.1:8000/api/cultivos/${id}/`, {
+    await fetch(`${API}/cultivos/${id}/`, {
       method: "DELETE",
     });
     notification.success({ message: "Cultivo eliminado" });
