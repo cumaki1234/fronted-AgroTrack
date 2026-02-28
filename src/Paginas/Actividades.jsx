@@ -44,8 +44,8 @@ const huertoMap = huertos.reduce((acc, h) => {
   const headers = { Authorization: `Bearer ${token}` };
 
   Promise.all([
-    axios.get(`http://localhost:8000/api/actividad/huerto/${huertoId}/`, { headers }),
-    axios.get(`http://localhost:8000/api/plantacion/plantaciones/huerto/${huertoId}/`, { headers }),
+    axios.get(`https://backend-agrotrack.onrender.com/api/actividad/huerto/${huertoId}/`, { headers }),
+    axios.get(`https://backend-agrotrack.onrender.com/api/plantacion/plantaciones/huerto/${huertoId}/`, { headers }),
   ])
   .then(([actividadesRes, plantacionesRes]) => {
 
@@ -84,7 +84,7 @@ useEffect(() => {
   if (!token) return;
 
   axios.get(
-  "http://localhost:8000/api/plantacion/plantaciones/listar/",
+  "https://backend-agrotrack.onrender.com/api/plantacion/plantaciones/listar/",
   {
     headers: { Authorization: `Bearer ${token}` },
   }

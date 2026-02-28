@@ -24,7 +24,7 @@ export default function ReporteProduccion() {
     setLoading(true);
 
     axios
-      .get("http://localhost:8000/api/plantacion/plantaciones/listar/", {
+      .get("https://backend-agrotrack.onrender.com/api/plantacion/plantaciones/listar/", {
         headers: {
           Authorization: `Bearer ${token}`,
         },

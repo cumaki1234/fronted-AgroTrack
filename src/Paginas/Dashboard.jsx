@@ -32,7 +32,7 @@ export default function Dashboard() {
     setLoading(true);
 
     axios
-      .get(`http://localhost:8000/api/plantacion/plantaciones/huerto/${huertoId}/`)
+      .get(`https://backend-agrotrack.onrender.com/api/plantacion/plantaciones/huerto/${huertoId}/`)
       .then((res) => setPlantaciones(res.data))
       .catch(console.error)
       .finally(() => setLoading(false));

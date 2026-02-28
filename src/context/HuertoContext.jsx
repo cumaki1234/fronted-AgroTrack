@@ -19,7 +19,7 @@ export function HuertoProvider({ children }) {
       setLoadingHuertos(true);
 
       const res = await axios.get(
-        "http://localhost:8000/api/huertos/",
+        "https://backend-agrotrack.onrender.com/api/huertos/",
         {
           headers: { Authorization: `Bearer ${token}` },
         }
