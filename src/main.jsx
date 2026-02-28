@@ -6,12 +6,14 @@ import './index.css'
 import 'antd/dist/reset.css';
 import App from './App'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <AuthProvider>
-      <Router>
+const rootElement = document.getElementById('root');
+
+if (rootElement) {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <AuthProvider>
         <App />
-      </Router>
-    </AuthProvider>
-  </StrictMode>
-)
+      </AuthProvider>
+    </StrictMode>
+  );
+}
