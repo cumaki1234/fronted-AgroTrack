@@ -10,7 +10,7 @@ import Simulador from "./Paginas/Simulador";
 import Reportes from "./Paginas/Reportes";
 import Actividades from "./Paginas/Actividades";
 import Sidebar from "./Componentes/Sidebar";
-import Cultivos from "./Paginas/cultivos";
+import Cultivos from "./Paginas/Cultivos"
 import PrivateRoute from "./components/PrivateRoute";
 import HuertoDetalle from "./Paginas/HuertoDetalle";
 import { AuthProvider } from "./context/AuthContext";
