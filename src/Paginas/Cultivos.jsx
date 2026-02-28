@@ -160,7 +160,7 @@ export default function CatalogoCultivos() {
                             src={
                               cultivo.imagen.startsWith("http")
                                 ? cultivo.imagen
-                                : `${API_URL}${cultivo.imagen}`
+                                : `${API}${cultivo.imagen}`
                             }
                             alt={cultivo.nombre}
                             className="w-full h-full object-cover"
