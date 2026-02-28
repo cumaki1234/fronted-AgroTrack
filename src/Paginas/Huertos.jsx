@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { Leaf, Trash2, Settings, Plus, Grid, Pencil } from "lucide-react";
 import EditorHuerto from "./EditorHuerto";
 
-const API = import.meta.env.VITE_API_URL + "/huertos";
+const API = import.meta.env.VITE_API_URL;
 
 // ── El editor se monta en document.body via portal ────────
 // Así React Router NUNCA puede desmontarlo
@@ -44,7 +44,7 @@ export default function GestionHuertos() {
     if (!nombre.trim()) return;
 
     try {
-      const res = await fetch(`${API}/crear/`, {
+      const res = await fetch(`${API}/huertos/crear/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -69,7 +69,7 @@ export default function GestionHuertos() {
   const guardarLayout = useCallback(async (id, layout) => {
     setGuardando(true);
     try {
-      const res  = await fetch(`${API}/${id}/`, {
+      const res  = await fetch(`${API}/huertos/${id}/`, {
         method:  "PUT",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body:    JSON.stringify({ layout }),
@@ -83,7 +83,7 @@ export default function GestionHuertos() {
 
   async function eliminarHuerto(id) {
     try {
-      await fetch(`${API}/${id}/`, {
+      await fetch(`${API}/huertos/${id}/`, {
         method:  "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
       });
