@@ -244,10 +244,6 @@ function TarjetaHuerto({ huerto, onEditar, onAdministrar, onEliminar }) {
           <Pencil className="w-4 h-4" />
           {tieneLayout ? "Editar diseño" : "Diseñar huerto"}
         </button>
-        <button onClick={onAdministrar}
-          className="flex items-center justify-center gap-2 w-full py-2.5 border-2 border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all font-semibold text-sm">
-          <Settings className="w-4 h-4" /> Administrar
-        </button>
         <Popconfirm
           title="Eliminar huerto"
           description="Esta acción eliminará el huerto y su diseño."
