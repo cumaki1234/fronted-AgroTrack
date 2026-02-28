@@ -4,7 +4,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine
 } from "recharts";
 
-const API_URL = "http://localhost:5000";
+const API_URL = "https://backend-modelo-gmfn.onrender.com";
 
 // ─── Traducciones: respuestas simples → valores técnicos ──
 const TRADUCCIONES = {
@@ -953,7 +953,7 @@ export default function SimuladorRiego() {
               <div>
                 <p className="font-bold mb-0.5">Error al conectar con la API</p>
                 <p className="text-red-500">{error}</p>
-                <p className="text-xs text-red-400 mt-1 font-mono">python app.py → http://localhost:5000</p>
+                <p className="text-xs text-red-400 mt-1 font-mono">python app.py → https://backend-modelo-gmfn.onrender.com</p>
               </div>
             </div>
           )}
