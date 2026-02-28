@@ -202,7 +202,7 @@ export default function CatalogoCultivos() {
                   </div>
                 </div>
 
-                {/* Botón eliminar */}
+                {/* Botón eliminar 
                <Popconfirm
                   title="Eliminar cultivo"
                   description="Esta acción no se puede deshacer"
@@ -220,7 +220,7 @@ export default function CatalogoCultivos() {
                     <Trash2 className="w-4 h-4" />
                     Eliminar
                   </button>
-                </Popconfirm>
+                </Popconfirm>*/}
 
               </div>
             </div>
