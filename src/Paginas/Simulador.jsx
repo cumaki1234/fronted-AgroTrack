@@ -879,7 +879,7 @@ export default function SimuladorRiego() {
           />
         )}
 
-        {/* ── MODO TÉCNICO ── */}
+        {/* ── MODO TÉCNICO ── 
         {modo==="tecnico" && (
           <div className="space-y-4">
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
@@ -922,7 +922,7 @@ export default function SimuladorRiego() {
               </div>
             </div>
 
-            {/* Días */}
+            {/* Días 
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
               <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Días a simular</p>
               <Slider label="" value={diasSlider} min={1} max={30} unit=" días" onChange={setDiasSlider}/>
@@ -943,7 +943,7 @@ export default function SimuladorRiego() {
               {loading ? "Consultando API..." : `▶ Simular — ${labelDias}`}
             </button>
           </div>
-        )}
+        )}*/}
 
         {/* Panel derecho — resultados */}
         <div className="lg:col-span-2 space-y-5">
