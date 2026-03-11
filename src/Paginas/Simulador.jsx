@@ -236,9 +236,18 @@ function PanelEscenario({ escenario }) {
   return (
     <div className="flex flex-col h-full rounded-2xl overflow-hidden border"
       style={{ borderColor: theme.mid + "66", boxShadow:`0 4px 32px 0 ${theme.accent}18` }}>
-
+{/* Info del modelo */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-xs text-gray-400 flex items-start gap-4">
+          <span className="text-2xl shrink-0">ℹ️</span>
+          <div className="space-y-1">
+            <p className="font-black text-gray-600">Sobre el modelo</p>
+            <p>Las predicciones se generan con un <strong className="text-gray-600">MLPRegressor</strong> entrenado sobre el dataset de hortalizas de ciclo corto (10.000 registros). El modelo predice el <strong className="text-gray-600">ISP (Índice de Salud de la Planta)</strong> como valor continuo 0–1, que se clasifica según los umbrales: ISP ≥ 0.55 → Bueno · ISP ≥ 0.30 → Regular · ISP &lt; 0.30 → Malo.</p>
+            <p className="mt-1">Variables de entrada: Temperatura · Humedad · pH del suelo · Luz solar · Precipitación · Altitud · Tipo de suelo · Tipo de irrigación · Fertilizantes · Presencia de plagas · Tipo de cultivo.</p>
+          </div>
+        </div>
       {/* Header */}
       <div className="px-6 py-4 flex items-center justify-between shrink-0"
+      
         style={{ background:`linear-gradient(135deg, ${theme.light}, white)`, borderBottom:`1px solid ${theme.mid}33` }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl"
@@ -617,15 +626,7 @@ export default function SimuladorEscenarios() {
         {/* Comparación (solo en vista ambos) */}
         {activeTab === "ambos" && <TablaComparacion resultados={resultados}/>}
 
-        {/* Info del modelo */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-xs text-gray-400 flex items-start gap-4">
-          <span className="text-2xl shrink-0">ℹ️</span>
-          <div className="space-y-1">
-            <p className="font-black text-gray-600">Sobre el modelo</p>
-            <p>Las predicciones se generan con un <strong className="text-gray-600">MLPRegressor</strong> entrenado sobre el dataset de hortalizas de ciclo corto (10.000 registros). El modelo predice el <strong className="text-gray-600">ISP (Índice de Salud de la Planta)</strong> como valor continuo 0–1, que se clasifica según los umbrales: ISP ≥ 0.55 → Bueno · ISP ≥ 0.30 → Regular · ISP &lt; 0.30 → Malo.</p>
-            <p className="mt-1">Variables de entrada: Temperatura · Humedad · pH del suelo · Luz solar · Precipitación · Altitud · Tipo de suelo · Tipo de irrigación · Fertilizantes · Presencia de plagas · Tipo de cultivo.</p>
-          </div>
-        </div>
+        
       </div>
     </div>
   );
