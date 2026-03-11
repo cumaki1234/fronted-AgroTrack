@@ -1,980 +1,531 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine
+  Tooltip, ResponsiveContainer, RadarChart, Radar,
+  PolarGrid, PolarAngleAxis
 } from "recharts";
 
 const API_URL = "https://backend-modelo-gmfn.onrender.com";
 
-// ─── Traducciones: respuestas simples → valores técnicos ──
-const TRADUCCIONES = {
-  tierra: {
-    "Muy seca — se agrieta o se ve polvorienta":       { humedadSuelo: 15 },
-    "Seca — la tierra suelta se deshace fácil":         { humedadSuelo: 28 },
-    "Normal — tierra suelta pero compacta":             { humedadSuelo: 50 },
-    "Húmeda — se siente fresca al tocar":               { humedadSuelo: 68 },
-    "Muy húmeda — se pega a los dedos o hay charcos":   { humedadSuelo: 85 },
+// ─── Paleta y tema ────────────────────────────────────────
+const THEME = {
+  maceta:  { accent: "#d97706", light: "#fef3c7", mid: "#f59e0b", dark: "#92400e", emoji: "🪴", glow: "shadow-amber-200"  },
+  jardin:  { accent: "#059669", light: "#d1fae5", mid: "#10b981", dark: "#065f46", emoji: "🌳", glow: "shadow-emerald-200" },
+};
+
+// ─── Rangos por escenario ─────────────────────────────────
+// Maceta: condiciones más controladas, menor altitud, sin lluvia real
+// Jardín: condiciones abiertas, mayor variabilidad
+const DEFAULTS = {
+  maceta: {
+    Temperatura: 22, Humedad: 65, pH_Suelo: 6.5,
+    Luz_Solar: 8,   Precipitacion: 20, Altitud: 500,
+    Tipo_Suelo: "Mixto", Tipo_Irrigacion: "Goteo",
+    Uso_Fertilizantes: "Organicos", Presencia_Plagas_Enfermedades: "No",
+    Tipo_Producto: "Lechuga",
   },
-  sol: {
-    "☁️ Nublado todo el día":        { radiacion: 180, temperatura: 16 },
-    "⛅ Parcialmente nublado":        { radiacion: 380, temperatura: 20 },
-    "🌤 Mayormente soleado":          { radiacion: 560, temperatura: 24 },
-    "☀️ Soleado y caluroso":          { radiacion: 750, temperatura: 29 },
-    "🔆 Muy soleado y muy caluroso":  { radiacion: 880, temperatura: 34 },
+  jardin: {
+    Temperatura: 20, Humedad: 60, pH_Suelo: 6.8,
+    Luz_Solar: 10,  Precipitacion: 55, Altitud: 1200,
+    Tipo_Suelo: "Mixto", Tipo_Irrigacion: "Aspersion",
+    Uso_Fertilizantes: "Organicos", Presencia_Plagas_Enfermedades: "No",
+    Tipo_Producto: "Tomate",
   },
-  lluvia: {
-    "No ha llovido nada esta semana":              { precipitacion: 0  },
-    "Llovió un poco (una o dos lloviznas)":        { precipitacion: 2  },
-    "Llovió normal (algunos días con lluvia)":     { precipitacion: 5  },
-    "Llovió bastante (casi todos los días)":       { precipitacion: 10 },
-    "Llovió muchísimo (lluvias fuertes)":          { precipitacion: 18 },
+};
+
+const RANGOS = {
+  maceta: {
+    Temperatura:   { min: 10, max: 40, step: 1,   unit: "°C",    label: "Temperatura" },
+    Humedad:       { min: 30, max: 90, step: 1,   unit: "%",     label: "Humedad amb." },
+    pH_Suelo:      { min: 4,  max: 9,  step: 0.1, unit: "",      label: "pH del suelo" },
+    Luz_Solar:     { min: 1,  max: 16, step: 0.5, unit: "h/día", label: "Luz solar"    },
+    Precipitacion: { min: 0,  max: 50, step: 1,   unit: "mm",    label: "Riego aplicado" },
+    Altitud:       { min: 0,  max: 3000, step: 50, unit: "m",    label: "Altitud"      },
   },
-  horasSol: {
-    "Menos de 2 horas (casi siempre a la sombra)": { horasSol: 1 },
-    "Unas 2–4 horas de sol directo":               { horasSol: 3 },
-    "Unas 4–6 horas de sol directo":               { horasSol: 5 },
-    "Más de 6 horas al sol todo el día":           { horasSol: 8 },
-  },
-  techo: {
-    "🌳 Bajo un techo, adentro o con sombra total": { techo: "techo"    },
-    "⛅ Con algo de techo pero recibe algo de sol":  { techo: "semitecho"},
-    "☀️ A cielo abierto, sin techo ni sombra":       { techo: "abierto"  },
-  },
-  contenedor: {
-    "🪴 Maceta pequeña o vasito de plástico":       { contenedor: "maceta_chica" },
-    "🪣 Maceta mediana o balde con tierra":         { contenedor: "maceta_grande"},
-    "🌱 Directo en la tierra o jardín":             { contenedor: "tierra"       },
-  },
-  riegoHabitual: {
-    "Casi no la riego, se me olvida seguido":   { riegoHabitual: "poco"     },
-    "La riego de vez en cuando, lo normal":     { riegoHabitual: "normal"   },
-    "La riego bastante, casi todos los días":   { riegoHabitual: "abundante"},
+  jardin: {
+    Temperatura:   { min: 5,  max: 45, step: 1,   unit: "°C",    label: "Temperatura" },
+    Humedad:       { min: 30, max: 100,step: 1,   unit: "%",     label: "Humedad amb." },
+    pH_Suelo:      { min: 4,  max: 9,  step: 0.1, unit: "",      label: "pH del suelo" },
+    Luz_Solar:     { min: 1,  max: 18, step: 0.5, unit: "h/día", label: "Luz solar"    },
+    Precipitacion: { min: 0,  max: 100,step: 1,   unit: "mm",    label: "Precipitación" },
+    Altitud:       { min: 0,  max: 4500, step: 100,"unit": "m",  label: "Altitud"      },
   },
 };
 
 const CULTIVOS = [
-  { value:"lechuga",   emoji:"🥬", label:"Lechuga",   desc:"Hoja verde, crece rápido"   },
-  { value:"tomate",    emoji:"🍅", label:"Tomate",    desc:"Fruto rojo, necesita sol"    },
-  { value:"zanahoria", emoji:"🥕", label:"Zanahoria", desc:"Raíz naranja, bajo tierra"   },
-  { value:"espinaca",  emoji:"🌿", label:"Espinaca",  desc:"Hoja oscura, tolera frío"    },
-  { value:"rabano",    emoji:"🔴", label:"Rábano",    desc:"Raíz pequeña, muy rápido"    },
+  { v:"Lechuga",   e:"🥬" }, { v:"Tomate",    e:"🍅" }, { v:"Zanahoria", e:"🥕" },
+  { v:"Espinaca",  e:"🌿" }, { v:"Frijol",    e:"🫘" }, { v:"Cebolla",   e:"🧅" },
+  { v:"Papa",      e:"🥔" }, { v:"Remolacha", e:"🟣" }, { v:"Trigo",     e:"🌾" },
+  { v:"Maiz",      e:"🌽" },
 ];
-const ETAPAS = [
-  { value:"inicial",    emoji:"🌱", label:"Recién sembré",            desc:"Semillas o plántulas pequeñas" },
-  { value:"desarrollo", emoji:"🌿", label:"Está creciendo",           desc:"Ya tiene hojas, crece bien"    },
-  { value:"maduracion", emoji:"🌾", label:"Casi lista para cosechar", desc:"Ya se ve el fruto o la raíz"  },
-];
+const SUELOS     = ["Mixto","Arcilloso","Arenoso"];
+const IRRIGACION = ["Goteo","Aspersion","Gravedad"];
+const FERTILIZ   = ["Organicos","Quimicos"];
 
-// ─── Componentes base ─────────────────────────────────────
-function CustomTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  const h = payload[0]?.value;
-  const color = h < 30 ? "#ef4444" : h < 55 ? "#f59e0b" : "#10b981";
-  return (
-    <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-sm">
-      <p className="text-gray-400 text-xs mb-1">{label}</p>
-      <p className="font-bold" style={{ color }}>{h}% humedad</p>
-    </div>
-  );
+// ─── Resultado → estilo ───────────────────────────────────
+const ESTADO_STYLE = {
+  Bueno:   { bg:"#d1fae5", border:"#6ee7b7", text:"#065f46", badge:"bg-emerald-100 text-emerald-800", icon:"✅", label:"Condiciones óptimas" },
+  Regular: { bg:"#fef3c7", border:"#fde68a", text:"#92400e", badge:"bg-amber-100 text-amber-800",     icon:"⚠️", label:"Condiciones aceptables" },
+  Malo:    { bg:"#fee2e2", border:"#fca5a5", text:"#991b1b", badge:"bg-red-100 text-red-800",         icon:"🚨", label:"Condiciones críticas" },
+};
+
+// ─── Hook: llamada al modelo ──────────────────────────────
+function useModelo() {
+  const [resultado, setResultado] = useState(null);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState(null);
+
+  const predecir = useCallback(async (vars) => {
+    setLoading(true); setError(null);
+    try {
+      const res  = await fetch(`${API_URL}/simular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vars),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error API");
+      setResultado(data);
+    } catch (e) {
+      setError(e.message);
+    } finally { setLoading(false); }
+  }, []);
+
+  return { resultado, loading, error, predecir };
 }
 
-function Slider({ label, value, min, max, step=1, unit, onChange }) {
-  const pct = ((value - min) / (max - min)) * 100;
+// ─── Slider personalizado ─────────────────────────────────
+function SliderVar({ campo, config, valor, onChange, accentColor }) {
+  const pct = ((valor - config.min) / (config.max - config.min)) * 100;
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
-        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{value}{unit}</span>
+    <div className="group">
+      <div className="flex justify-between items-baseline mb-1.5">
+        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{config.label}</span>
+        <span className="text-sm font-black tabular-nums" style={{ color: accentColor }}>
+          {typeof valor === "number" && campo === "pH_Suelo" ? valor.toFixed(1) : valor}{config.unit}
+        </span>
       </div>
-      <div className="relative h-1.5 rounded-full bg-gray-100">
-        <div className="absolute h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width:`${pct}%` }}/>
-        <input type="range" min={min} max={max} step={step} value={value}
-          onChange={e => onChange(Number(e.target.value))}
+      <div className="relative h-2 rounded-full bg-gray-100">
+        <div className="absolute h-full rounded-full transition-all duration-150"
+          style={{ width:`${pct}%`, background:`linear-gradient(90deg, ${accentColor}66, ${accentColor})` }}/>
+        <input type="range" min={config.min} max={config.max} step={config.step} value={valor}
+          onChange={e => onChange(campo, Number(e.target.value))}
           className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"/>
-        <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white border-2 border-emerald-500 shadow-md pointer-events-none"
-          style={{ left:`calc(${pct}% - 8px)` }}/>
+        <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white border-2 shadow-md pointer-events-none transition-all duration-150"
+          style={{ left:`calc(${pct}% - 8px)`, borderColor: accentColor }}/>
       </div>
     </div>
   );
 }
 
-function SelectBasico({ label, value, options, onChange }) {
+// ─── Selector de opciones tipo chip ──────────────────────
+function ChipSelector({ opciones, valor, onChange, accentColor, emojiMap }) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 appearance-none cursor-pointer">
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
-}
-
-function OpcionVisual({ opciones, valor, onChange }) {
-  return (
-    <div className="space-y-2">
+    <div className="flex flex-wrap gap-1.5">
       {opciones.map(op => (
         <button key={op} onClick={() => onChange(op)}
-          className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${
-            valor === op
-              ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
-              : "border-gray-100 bg-gray-50 text-gray-600 hover:border-emerald-200"
-          }`}>
-          {op}
+          className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all duration-150"
+          style={valor === op
+            ? { backgroundColor: accentColor + "22", borderColor: accentColor, color: accentColor }
+            : { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#6b7280" }}>
+          {emojiMap?.[op] && <span className="mr-1">{emojiMap[op]}</span>}{op}
         </button>
       ))}
     </div>
   );
 }
 
-function SelectorCultivo({ valor, onChange }) {
+// ─── Gauge ISP ────────────────────────────────────────────
+function GaugeISP({ isp, estado }) {
+  const style  = ESTADO_STYLE[estado] || ESTADO_STYLE.Regular;
+  const pct    = Math.max(0, Math.min(1, isp));
+  const angle  = pct * 180 - 90; // -90 a +90
+  const r = 70, cx = 90, cy = 90;
+  const arcStart = { x: cx - r, y: cy };
+  const arcEnd   = { x: cx + r, y: cy };
+  // Needle
+  const rad  = (angle * Math.PI) / 180;
+  const nx   = cx + (r - 12) * Math.cos(rad);
+  const ny   = cy + (r - 12) * Math.sin(rad);
+
   return (
-    <div className="grid grid-cols-1 gap-2">
-      {CULTIVOS.map(c => (
-        <button key={c.value} onClick={() => onChange(c.value)}
-          className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-            valor === c.value ? "border-emerald-500 bg-emerald-50" : "border-gray-100 bg-gray-50 hover:border-emerald-200"
-          }`}>
-          <span className="text-2xl">{c.emoji}</span>
-          <div>
-            <p className={`text-sm font-bold ${valor === c.value ? "text-emerald-800" : "text-gray-700"}`}>{c.label}</p>
-            <p className="text-xs text-gray-400">{c.desc}</p>
-          </div>
-          {valor === c.value && <span className="ml-auto text-emerald-500">✓</span>}
-        </button>
-      ))}
+    <div className="flex flex-col items-center">
+      <svg width="180" height="100" viewBox="0 0 180 100">
+        {/* Arco fondo */}
+        <path d={`M ${arcStart.x} ${cy} A ${r} ${r} 0 0 1 ${arcEnd.x} ${cy}`}
+          fill="none" stroke="#e5e7eb" strokeWidth="12" strokeLinecap="round"/>
+        {/* Arco rojo */}
+        <path d={`M ${arcStart.x} ${cy} A ${r} ${r} 0 0 1 ${cx + r * Math.cos((0.3*180-90)*Math.PI/180)} ${cy + r * Math.sin((0.3*180-90)*Math.PI/180)}`}
+          fill="none" stroke="#fca5a5" strokeWidth="12" strokeLinecap="round"/>
+        {/* Arco amarillo */}
+        <path d={`M ${cx + r * Math.cos((0.3*180-90)*Math.PI/180)} ${cy + r * Math.sin((0.3*180-90)*Math.PI/180)} A ${r} ${r} 0 0 1 ${cx + r * Math.cos((0.55*180-90)*Math.PI/180)} ${cy + r * Math.sin((0.55*180-90)*Math.PI/180)}`}
+          fill="none" stroke="#fde68a" strokeWidth="12" strokeLinecap="round"/>
+        {/* Arco verde */}
+        <path d={`M ${cx + r * Math.cos((0.55*180-90)*Math.PI/180)} ${cy + r * Math.sin((0.55*180-90)*Math.PI/180)} A ${r} ${r} 0 0 1 ${arcEnd.x} ${cy}`}
+          fill="none" stroke="#6ee7b7" strokeWidth="12" strokeLinecap="round"/>
+        {/* Aguja */}
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#1f2937" strokeWidth="3" strokeLinecap="round"/>
+        <circle cx={cx} cy={cy} r="5" fill="#1f2937"/>
+        {/* Valor */}
+        <text x={cx} y={cy - 20} textAnchor="middle" fontSize="22" fontWeight="900" fill={style.text}>{(pct*100).toFixed(0)}</text>
+        <text x={cx} y={cy - 6}  textAnchor="middle" fontSize="9"  fill="#9ca3af">ISP</text>
+      </svg>
+      <span className={`text-xs font-black px-3 py-1 rounded-full ${style.badge}`}>{style.icon} {estado}</span>
     </div>
   );
 }
 
-function SelectorEtapa({ valor, onChange }) {
+// ─── Radar de variables ───────────────────────────────────
+function RadarVariables({ vars, escenario }) {
+  const theme = THEME[escenario];
+  // Normalizar cada variable a 0-100 para el radar
+  const rangos = RANGOS[escenario];
+  const data = Object.entries(rangos).map(([k, r]) => ({
+    var: r.label.split(" ")[0],
+    valor: Math.round(((vars[k] - r.min) / (r.max - r.min)) * 100),
+  }));
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {ETAPAS.map(e => (
-        <button key={e.value} onClick={() => onChange(e.value)}
-          className={`flex flex-col items-center text-center px-3 py-4 rounded-xl border transition-all ${
-            valor === e.value ? "border-emerald-500 bg-emerald-50" : "border-gray-100 bg-gray-50 hover:border-emerald-200"
-          }`}>
-          <span className="text-2xl mb-1">{e.emoji}</span>
-          <p className={`text-xs font-bold leading-tight ${valor === e.value ? "text-emerald-800" : "text-gray-700"}`}>{e.label}</p>
-          <p className="text-xs text-gray-400 mt-1 leading-tight">{e.desc}</p>
-        </button>
-      ))}
-    </div>
+    <ResponsiveContainer width="100%" height={200}>
+      <RadarChart data={data} margin={{ top:10, right:20, bottom:10, left:20 }}>
+        <PolarGrid stroke="#e5e7eb"/>
+        <PolarAngleAxis dataKey="var" tick={{ fontSize:10, fill:"#9ca3af", fontWeight:700 }}/>
+        <Radar dataKey="valor" stroke={theme.accent} fill={theme.accent} fillOpacity={0.15} strokeWidth={2}/>
+      </RadarChart>
+    </ResponsiveContainer>
   );
 }
 
-// ─── Guía de riego práctica ───────────────────────────────
-function GuiaRiego({ humedadFinal }) {
-  const [herramienta, setHerramienta] = useState(null);
-  const [tamanio, setTamanio]         = useState(null);
-  const [abierto, setAbierto]         = useState(false);
+// ─── Panel de un escenario ────────────────────────────────
+function PanelEscenario({ escenario }) {
+  const theme  = THEME[escenario];
+  const [vars, setVars]   = useState({ ...DEFAULTS[escenario] });
+  const [dirty, setDirty] = useState(false);
+  const { resultado, loading, error, predecir } = useModelo();
 
-  const urgencia         = humedadFinal < 30 ? "alta" : "media";
-  const litrosNecesarios = humedadFinal < 30 ? 2.5 : 1.5;
+  const setVar = useCallback((campo, valor) => {
+    setVars(p => ({ ...p, [campo]: valor }));
+    setDirty(true);
+  }, []);
 
-  const herramientas = [
-    { id:"regadera", emoji:"🪣", label:"Regadera",          desc:"Lata o balde con pico para regar" },
-    { id:"vaso",     emoji:"🥤", label:"Vaso o taza",       desc:"Un vaso normal de cocina"         },
-    { id:"tacho",    emoji:"🪣", label:"Tacho / balde",     desc:"Un balde grande con agua"         },
-    { id:"rociador", emoji:"🌸", label:"Botella rociadora", desc:"Spray o botella con boquilla"     },
-    { id:"manguera", emoji:"🌀", label:"Manguera",          desc:"Manguera conectada a la llave"    },
-  ];
+  const ejecutar = useCallback(() => {
+    predecir({ ...vars, dias: 1 });
+    setDirty(false);
+  }, [vars, predecir]);
 
-  const tamanios = {
-    regadera: [
-      { id:"chica",  label:"Chica (1–2 litros)",   litros: 1.5 },
-      { id:"mediana",label:"Mediana (5–8 litros)", litros: 6   },
-      { id:"grande", label:"Grande (10+ litros)",  litros: 12  },
-    ],
-    vaso: [
-      { id:"chico",  label:"Vaso chico (200 ml)",  litros: 0.2  },
-      { id:"normal", label:"Vaso normal (350 ml)", litros: 0.35 },
-      { id:"grande", label:"Vaso grande (500 ml)", litros: 0.5  },
-    ],
-    tacho: [
-      { id:"chico",  label:"Balde chico (5 L)",   litros: 5  },
-      { id:"normal", label:"Balde normal (10 L)", litros: 10 },
-      { id:"grande", label:"Balde grande (20 L)", litros: 20 },
-    ],
-    rociador: [
-      { id:"chico",  label:"Botella chica (500 ml)", litros: 0.5 },
-      { id:"mediana",label:"Botella mediana (1 L)",  litros: 1   },
-      { id:"grande", label:"Botella grande (2 L)",   litros: 2   },
-    ],
-    manguera: [
-      { id:"suave",  label:"Chorro suave (hilo)",  litrosXmin: 5  },
-      { id:"normal", label:"Chorro normal",         litrosXmin: 10 },
-      { id:"fuerte", label:"Chorro fuerte",         litrosXmin: 20 },
-    ],
-  };
+  const resetear = () => { setVars({ ...DEFAULTS[escenario] }); setDirty(true); };
 
-  const calcularInstruccion = () => {
-    if (!herramienta || !tamanio) return null;
-    const sel = tamanios[herramienta.id].find(o => o.id === tamanio);
-    if (!sel) return null;
+  const estilo = resultado ? ESTADO_STYLE[resultado.estado] : null;
 
-    if (herramienta.id === "manguera") {
-      const segs = Math.round((litrosNecesarios / sel.litrosXmin) * 60);
-      const min  = Math.floor(segs / 60);
-      const seg  = segs % 60;
-      const tiempo = min > 0 ? `${min} minuto${min > 1 ? "s" : ""}${seg > 0 ? ` y ${seg} segundos` : ""}` : `${seg} segundos`;
-      return {
-        texto: `Riega durante ${tiempo} sin mover la manguera. Apunta a la base de la planta, no a las hojas.`,
-        extra: urgencia === "alta" ? "Como la tierra está muy seca, ve despacio para que el agua se absorba bien." : "Con calma, no necesitas apurarte.",
-      };
-    }
-    if (herramienta.id === "rociador") {
-      const rociadas = Math.round((litrosNecesarios / sel.litros) * 50);
-      return {
-        texto: `Dale aproximadamente ${rociadas} rociadas alrededor de la base de la planta. Ve despacio y cubre bien la tierra.`,
-        extra: urgencia === "alta" ? "La planta tiene mucha sed, no te quedes corto. Si puedes, repite mañana también." : "Con eso alcanza por ahora.",
-      };
-    }
-    const cantidad = Math.ceil(litrosNecesarios / sel.litros);
-    const parcial  = cantidad === 1 && (litrosNecesarios / sel.litros) < 0.7;
-    const lleno    = parcial ? (litrosNecesarios / sel.litros < 0.5 ? "hasta la mitad" : "hasta tres cuartos") : "lleno";
-    const nombreEnvase = herramienta.id === "vaso" ? `vaso${cantidad > 1 ? "s" : ""}` : herramienta.label.toLowerCase() + (cantidad > 1 ? "s" : "");
-    const texto = parcial
-      ? `Llena el ${herramienta.id} ${lleno} y tíraselo a la tierra.`
-      : `Usa ${cantidad} ${nombreEnvase} ${cantidad > 1 ? "llenos" : "lleno"} de agua. Tírala despacio en la tierra.`;
-    return {
-      texto,
-      extra: urgencia === "alta"
-        ? "Como la tierra está muy seca, espera un par de minutos entre un envase y otro."
-        : "Con eso debería ser suficiente por hoy.",
-    };
-  };
-
-  const instruccion = calcularInstruccion();
+  // Mapa emoji para cultivos
+  const cultivoEmoji = Object.fromEntries(CULTIVOS.map(c => [c.v, c.e]));
 
   return (
-    <div className="bg-white border border-blue-100 rounded-2xl shadow-sm overflow-hidden">
-      <button onClick={() => setAbierto(v => !v)}
-        className="w-full px-6 py-4 flex items-center justify-between hover:bg-blue-50 transition">
+    <div className="flex flex-col h-full rounded-2xl overflow-hidden border"
+      style={{ borderColor: theme.mid + "66", boxShadow:`0 4px 32px 0 ${theme.accent}18` }}>
+
+      {/* Header */}
+      <div className="px-6 py-4 flex items-center justify-between shrink-0"
+        style={{ background:`linear-gradient(135deg, ${theme.light}, white)`, borderBottom:`1px solid ${theme.mid}33` }}>
         <div className="flex items-center gap-3">
-          <span className="text-xl">💧</span>
-          <div className="text-left">
-            <p className="text-sm font-black text-gray-700">¿Vas a regar ahora? Te digo cuánto</p>
-            <p className="text-xs text-gray-400">Dime qué tienes en casa y te explico cómo</p>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl"
+            style={{ backgroundColor: theme.accent + "22" }}>{theme.emoji}</div>
+          <div>
+            <h2 className="font-black text-gray-800 capitalize text-base">Escenario {escenario}</h2>
+            <p className="text-xs text-gray-400">
+              {escenario === "maceta" ? "Ambiente controlado · Riego manual" : "Ambiente abierto · Condiciones naturales"}
+            </p>
           </div>
         </div>
-        <span className="text-gray-400 text-sm">{abierto ? "▲ Ocultar" : "▼ Abrir"}</span>
-      </button>
-      {abierto && (
-        <div className="px-6 pb-6 border-t border-blue-50 pt-5 space-y-5">
-          <div>
-            <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">¿Con qué vas a regar?</p>
-            <div className="grid grid-cols-1 gap-2">
-              {herramientas.map(h => (
-                <button key={h.id} onClick={() => { setHerramienta(h); setTamanio(null); }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                    herramienta?.id === h.id ? "border-blue-400 bg-blue-50" : "border-gray-100 bg-gray-50 hover:border-blue-200"
-                  }`}>
-                  <span className="text-2xl">{h.emoji}</span>
-                  <div>
-                    <p className={`text-sm font-bold ${herramienta?.id === h.id ? "text-blue-800" : "text-gray-700"}`}>{h.label}</p>
-                    <p className="text-xs text-gray-400">{h.desc}</p>
-                  </div>
-                  {herramienta?.id === h.id && <span className="ml-auto text-blue-500">✓</span>}
+        <button onClick={resetear} className="text-xs text-gray-400 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 font-bold transition">
+          ↺ Reset
+        </button>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Columna izquierda: controles ── */}
+        <div className="w-72 shrink-0 flex flex-col border-r overflow-y-auto"
+          style={{ borderColor: theme.mid + "33" }}>
+
+          {/* Variables numéricas */}
+          <div className="p-5 space-y-5 border-b" style={{ borderColor: theme.mid + "22" }}>
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: theme.dark }}>
+              Variables ambientales
+            </p>
+            {Object.entries(RANGOS[escenario]).map(([campo, cfg]) => (
+              <SliderVar key={campo} campo={campo} config={cfg}
+                valor={vars[campo]} onChange={setVar} accentColor={theme.accent}/>
+            ))}
+          </div>
+
+          {/* Cultivo */}
+          <div className="p-5 space-y-3 border-b" style={{ borderColor: theme.mid + "22" }}>
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: theme.dark }}>
+              Cultivo
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {CULTIVOS.map(c => (
+                <button key={c.v} onClick={() => setVar("Tipo_Producto", c.v)}
+                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold border transition-all"
+                  style={vars.Tipo_Producto === c.v
+                    ? { backgroundColor: theme.accent+"22", borderColor: theme.accent, color: theme.dark }
+                    : { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#6b7280" }}>
+                  <span>{c.e}</span><span>{c.v}</span>
                 </button>
               ))}
             </div>
           </div>
-          {herramienta && (
+
+          {/* Variables categóricas */}
+          <div className="p-5 space-y-4">
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: theme.dark }}>
+              Condiciones del suelo
+            </p>
+
             <div>
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                {herramienta.id === "manguera" ? "¿Cómo abres la llave?" : `¿De qué tamaño?`}
+              <p className="text-xs font-bold text-gray-400 mb-2">Tipo de suelo</p>
+              <ChipSelector opciones={SUELOS} valor={vars.Tipo_Suelo}
+                onChange={v => setVar("Tipo_Suelo", v)} accentColor={theme.accent}/>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-gray-400 mb-2">Tipo de irrigación</p>
+              <ChipSelector opciones={IRRIGACION} valor={vars.Tipo_Irrigacion}
+                onChange={v => setVar("Tipo_Irrigacion", v)} accentColor={theme.accent}/>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-gray-400 mb-2">Fertilizantes</p>
+              <ChipSelector opciones={FERTILIZ} valor={vars.Uso_Fertilizantes}
+                onChange={v => setVar("Uso_Fertilizantes", v)} accentColor={theme.accent}/>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-gray-400 mb-2">Plagas / Enfermedades</p>
+              <ChipSelector opciones={["No","Si"]} valor={vars.Presencia_Plagas_Enfermedades}
+                onChange={v => setVar("Presencia_Plagas_Enfermedades", v)} accentColor={theme.accent}
+                emojiMap={{ No:"✅", Si:"🐛" }}/>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Columna derecha: resultado ── */}
+        <div className="flex-1 flex flex-col overflow-y-auto">
+
+          {/* Botón predecir */}
+          <div className="p-5 shrink-0">
+            <button onClick={ejecutar} disabled={loading}
+              className="w-full py-3.5 rounded-xl text-white font-black text-sm transition-all active:scale-95 disabled:opacity-50 shadow-lg"
+              style={{ background:`linear-gradient(135deg, ${theme.accent}, ${theme.dark})`,
+                       boxShadow: dirty ? `0 4px 20px ${theme.accent}55` : "none" }}>
+              {loading ? "⏳ Prediciendo..." : dirty ? `▶ Predecir estado — ${vars.Tipo_Producto}` : "▶ Predecir de nuevo"}
+            </button>
+            {dirty && !loading && (
+              <p className="text-xs text-center mt-2" style={{ color: theme.accent }}>
+                ⬆ Hay cambios sin predecir
               </p>
-              <div className="space-y-2">
-                {tamanios[herramienta.id].map(t => (
-                  <button key={t.id} onClick={() => setTamanio(t.id)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-all ${
-                      tamanio === t.id ? "border-blue-400 bg-blue-50 text-blue-800 font-semibold" : "border-gray-100 bg-gray-50 text-gray-600 hover:border-blue-200"
-                    }`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
+            )}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mx-5 mb-4 p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+              <p className="font-bold mb-1">⚠️ Error al conectar con la API</p>
+              <p className="font-mono opacity-75">{error}</p>
             </div>
           )}
-          {instruccion && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl shrink-0">✅</span>
-                <div>
-                  <p className="font-black text-emerald-800 text-sm mb-2">Aquí va cómo hacerlo:</p>
-                  <p className="text-sm text-emerald-900 leading-relaxed mb-3">{instruccion.texto}</p>
-                  <div className="bg-white border border-emerald-100 rounded-xl px-4 py-3">
-                    <p className="text-xs text-emerald-700 leading-relaxed">💡 {instruccion.extra}</p>
+
+          {/* Resultado */}
+          {resultado && estilo && (
+            <div className="px-5 pb-5 space-y-4">
+
+              {/* Gauge + estado */}
+              <div className="rounded-2xl p-5 flex flex-col items-center gap-2"
+                style={{ backgroundColor: estilo.bg, border:`1px solid ${estilo.border}` }}>
+                <GaugeISP isp={resultado.isp_final ?? (resultado.humedadFinal / 100)} estado={resultado.estado}/>
+                <p className="text-sm font-black mt-1" style={{ color: estilo.text }}>{resultado.titulo || estilo.label}</p>
+                {resultado.mensaje && (
+                  <p className="text-xs text-center leading-relaxed text-gray-600 max-w-xs">{resultado.mensaje}</p>
+                )}
+              </div>
+
+              {/* Radar de variables normalizadas */}
+              <div className="rounded-2xl border p-4 bg-white" style={{ borderColor: theme.mid + "44" }}>
+                <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: theme.dark }}>
+                  Perfil de variables
+                </p>
+                <RadarVariables vars={vars} escenario={escenario}/>
+              </div>
+
+              {/* Métricas rápidas */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label:"Temperatura",   valor:`${vars.Temperatura}°C`,      icon:"🌡" },
+                  { label:"Luz solar",     valor:`${vars.Luz_Solar}h`,         icon:"☀️" },
+                  { label:"pH suelo",      valor:vars.pH_Suelo.toFixed(1),     icon:"🧪" },
+                  { label:"Humedad",       valor:`${vars.Humedad}%`,           icon:"💧" },
+                  { label:"Precipitación", valor:`${vars.Precipitacion}mm`,    icon:"🌧" },
+                  { label:"Altitud",       valor:`${vars.Altitud}m`,           icon:"⛰" },
+                ].map(m => (
+                  <div key={m.label} className="rounded-xl p-3 text-center border bg-gray-50 border-gray-100">
+                    <p className="text-lg">{m.icon}</p>
+                    <p className="text-sm font-black text-gray-700 tabular-nums">{m.valor}</p>
+                    <p className="text-xs text-gray-400 leading-tight">{m.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recomendación si la hay */}
+              {resultado.recomendacion && (
+                <div className="rounded-2xl p-4 border" style={{ backgroundColor: theme.light, borderColor: theme.mid + "66" }}>
+                  <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: theme.dark }}>💬 Recomendación</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">{resultado.recomendacion}</p>
+                </div>
+              )}
+
+              {/* Pasos si los hay */}
+              {resultado.pasos?.length > 0 && (
+                <div className="rounded-2xl p-4 border bg-white" style={{ borderColor: theme.mid + "44" }}>
+                  <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: theme.dark }}>✅ Acciones sugeridas</p>
+                  <div className="space-y-2">
+                    {resultado.pasos.map((paso, i) => (
+                      <div key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="shrink-0">{paso.split(" ")[0]}</span>
+                        <span className="leading-relaxed">{paso.split(" ").slice(1).join(" ")}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Estado vacío */}
+          {!resultado && !loading && !error && (
+            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
+                style={{ backgroundColor: theme.light }}>
+                {theme.emoji}
               </div>
+              <p className="text-sm font-black text-gray-300 mb-1">Configura las variables</p>
+              <p className="text-xs text-gray-300 max-w-xs leading-relaxed">
+                Ajusta los sliders y las opciones del panel izquierdo, luego presiona <strong>Predecir</strong>.
+              </p>
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Calendario de riego ──────────────────────────────────
-function CalendarioRiego({ calendario, dias }) {
-  const [vista, setVista] = useState("calendario"); // "calendario" | "lista"
-
-  const colorDia = (estado) =>
-    estado === "critico" ? "bg-red-400 text-white"
-    : estado === "alerta" ? "bg-amber-300 text-amber-900"
-    : "bg-emerald-400 text-white";
-
-  const bgDia = (estado) =>
-    estado === "critico" ? "bg-red-50 border-red-200"
-    : estado === "alerta" ? "bg-amber-50 border-amber-200"
-    : "bg-emerald-50 border-emerald-200";
-
-  const iconoDia = (estado) =>
-    estado === "critico" ? "💧" : estado === "alerta" ? "⚠️" : "✅";
-
-  const textoDia = (item) =>
-    estado === "critico" ? "Riega hoy" : item.estado === "alerta" ? "Considera regar" : "Sin riego";
-
-  return (
-    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-      {/* Header con toggle de vista */}
-      <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-base">📅</span>
-          <p className="text-sm font-black text-gray-700">Calendario de riego</p>
-        </div>
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {[
-            { id:"calendario", label:"🗓 Calendario" },
-            { id:"lista",      label:"📋 Lista"      },
-          ].map(v => (
-            <button key={v.id} onClick={() => setVista(v.id)}
-              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${
-                vista === v.id ? "bg-white text-emerald-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-              }`}>
-              {v.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="p-5">
-        {/* Leyenda */}
-        <div className="flex gap-3 mb-4 flex-wrap">
-          {[
-            { color:"bg-red-400",     label:"Riega hoy"         },
-            { color:"bg-amber-300",   label:"Considera regar"   },
-            { color:"bg-emerald-400", label:"Sin riego"         },
-          ].map(l => (
-            <span key={l.label} className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className={`w-3 h-3 rounded-full ${l.color}`}/>
-              {l.label}
-            </span>
-          ))}
-        </div>
-
-        {/* Vista calendario (grilla) */}
-        {vista === "calendario" && (
-          <div className="grid gap-2" style={{ gridTemplateColumns:`repeat(${Math.min(dias+1, 7)}, 1fr)` }}>
-            {calendario.map((item, i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div className={`w-full aspect-square rounded-xl flex flex-col items-center justify-center text-center p-1 ${colorDia(item.estado)}`}>
-                  <span className="text-lg leading-none">{iconoDia(item.estado)}</span>
-                  <span className="text-xs font-black mt-1 leading-tight">
-                    {item.etiqueta.replace("Dia ", "D")}
-                  </span>
-                  <span className="text-xs opacity-75 leading-none">{item.humedad}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Vista lista */}
-        {vista === "lista" && (
-          <div className="space-y-2">
-            {calendario.map((item, i) => (
-              <div key={i} className={`flex items-center gap-3 p-3 rounded-xl border ${bgDia(item.estado)}`}>
-                <span className="text-xl shrink-0">{iconoDia(item.estado)}</span>
-                <div className="flex-1">
-                  <p className="text-sm font-black text-gray-700">{item.etiqueta}</p>
-                  <p className="text-xs text-gray-500">Humedad estimada: {item.humedad}%</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                    item.estado === "critico" ? "bg-red-100 text-red-700"
-                    : item.estado === "alerta" ? "bg-amber-100 text-amber-700"
-                    : "bg-emerald-100 text-emerald-700"
-                  }`}>
-                    {item.estado === "critico" ? "💧 Riega" : item.estado === "alerta" ? "⚠️ Vigilar" : "✅ OK"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Resumen rápido */}
-        <div className="mt-4 grid grid-cols-3 gap-3 pt-4 border-t border-gray-50">
-          {[
-            { label:"Días que necesita agua", count: calendario.filter(c => c.regar).length,   color:"text-red-600 bg-red-50 border-red-100"     },
-            { label:"Días a vigilar",          count: calendario.filter(c => c.vigilar).length, color:"text-amber-600 bg-amber-50 border-amber-100"},
-            { label:"Días sin preocupación",   count: calendario.filter(c => !c.regar && !c.vigilar).length, color:"text-emerald-700 bg-emerald-50 border-emerald-100"},
-          ].map(r => (
-            <div key={r.label} className={`rounded-xl border p-3 text-center ${r.color}`}>
-              <p className="text-2xl font-black">{r.count}</p>
-              <p className="text-xs font-semibold mt-1 leading-tight">{r.label}</p>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
 }
 
-// ─── Panel de resultados ──────────────────────────────────
-function Resultados({ sim, st }) {
-  const [verGrafica, setVerGrafica] = useState(false);
-  const iconoEstado = sim.estado === "critico" ? "🚨" : sim.estado === "alerta" ? "⚠️" : "✅";
-  const nivelAgua   = sim.humedadFinal < 30 ? "Muy seca"
-    : sim.humedadFinal < 55 ? "Poco húmeda"
-    : sim.humedadFinal < 75 ? "Bien húmeda" : "Muy húmeda";
-
-  return (
-    <>
-      {/* Estado principal */}
-      <div className={`rounded-2xl border-2 p-6 ${st.bg} ${st.border}`}>
-        <div className="flex items-start gap-4">
-          <span className="text-4xl">{iconoEstado}</span>
-          <div className="flex-1">
-            <p className={`text-2xl font-black ${st.text} leading-tight`}>{sim.titulo}</p>
-            <p className="text-gray-600 mt-2 text-sm leading-relaxed">{sim.mensaje}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Barra de humedad visual */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-        <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
-          ¿Cómo estará la tierra al final de los {sim.dias} día{sim.dias > 1 ? "s" : ""}?
-        </p>
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>Tierra seca</span><span>Tierra mojada</span>
-            </div>
-            <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="absolute left-0 top-0 h-full bg-red-100 rounded-l-full" style={{width:"30%"}}/>
-              <div className="absolute top-0 h-full bg-amber-100" style={{left:"30%", width:"25%"}}/>
-              <div className="absolute top-0 h-full bg-emerald-100" style={{left:"55%", width:"25%"}}/>
-              <div className="absolute top-0 h-full bg-blue-100 rounded-r-full" style={{left:"80%", width:"20%"}}/>
-              <div className="absolute top-0 h-full w-1.5 rounded-full bg-gray-800 shadow-lg"
-                style={{left:`calc(${Math.min(sim.humedadFinal, 98)}% - 3px)`}}/>
-            </div>
-            <div className="flex justify-between text-xs mt-1">
-              <span className="text-red-400 font-semibold">Peligro</span>
-              <span className="text-amber-400 font-semibold">Alerta</span>
-              <span className="text-emerald-500 font-semibold">Ideal</span>
-              <span className="text-blue-400 font-semibold">Exceso</span>
-            </div>
-          </div>
-          <div className={`text-center px-4 py-3 rounded-xl border ${st.bg} ${st.border} shrink-0`}>
-            <p className={`text-lg font-black ${st.text}`}>{nivelAgua}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{sim.humedadFinal.toFixed(0)}% humedad</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Pasos */}
-      {sim.pasos && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">¿Qué hacer ahora?</p>
-          <div className="space-y-3">
-            {sim.pasos.map((paso, i) => (
-              <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
-                <span className="text-base shrink-0">{paso.split(" ")[0]}</span>
-                <p className="text-sm text-gray-700 leading-relaxed">{paso.split(" ").slice(1).join(" ")}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Consejo */}
-      {sim.recomendacion && (
-        <div className={`rounded-2xl border p-5 ${st.bg} ${st.border}`}>
-          <div className="flex gap-3">
-            <span className="text-2xl shrink-0">💬</span>
-            <div>
-              <p className={`text-sm font-black ${st.text} mb-2`}>Consejo para tu cultivo</p>
-              <p className="text-sm text-gray-600 leading-relaxed">{sim.recomendacion}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Guía de riego */}
-      {(sim.estado === "critico" || sim.estado === "alerta") && (
-        <GuiaRiego humedadFinal={sim.humedadFinal} />
-      )}
-
-      {/* Calendario de riego */}
-      {sim.calendario && (
-        <CalendarioRiego calendario={sim.calendario} dias={sim.dias} />
-      )}
-
-      {/* Gráfica colapsable */}
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-        <button onClick={() => setVerGrafica(v => !v)}
-          className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition">
-          <div className="flex items-center gap-2">
-            <span className="text-base">📈</span>
-            <div className="text-left">
-              <p className="text-sm font-black text-gray-700">Ver gráfica de humedad día a día</p>
-              <p className="text-xs text-gray-400">Proyección de los {sim.dias} días simulados</p>
-            </div>
-          </div>
-          <span className="text-gray-400 text-sm">{verGrafica ? "▲ Ocultar" : "▼ Ver gráfica"}</span>
-        </button>
-        {verGrafica && (
-          <div className="px-6 pb-6 border-t border-gray-50 pt-4">
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={sim.datos} margin={{ top:5, right:10, left:-10, bottom:0 }}>
-                <defs>
-                  <linearGradient id="humGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor={st.bar} stopOpacity={0.18}/>
-                    <stop offset="95%" stopColor={st.bar} stopOpacity={0.01}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
-                <XAxis dataKey="dia" tick={{ fontSize:10, fill:"#9ca3af", fontWeight:600 }} axisLine={false} tickLine={false}
-                  interval={sim.dias > 14 ? Math.floor(sim.dias / 7) : 0}/>
-                <YAxis domain={[0,100]} tick={{ fontSize:10, fill:"#9ca3af", fontWeight:600 }} axisLine={false} tickLine={false} unit="%"/>
-                <Tooltip content={<CustomTooltip/>}/>
-                <ReferenceLine y={30} stroke="#f87171" strokeDasharray="4 3" strokeWidth={1.5}/>
-                <ReferenceLine y={60} stroke="#34d399" strokeDasharray="4 3" strokeWidth={1.5}/>
-                <Area type="monotoneX" dataKey="humedad" stroke={st.bar} strokeWidth={2.5} fill="url(#humGrad)"
-                  dot={sim.dias <= 14 ? { r:3, fill:st.bar, strokeWidth:2, stroke:"white" } : false}
-                  activeDot={{ r:5, fill:st.bar, stroke:"white", strokeWidth:2 }}/>
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-// ─── Modo Simple con Tabs ─────────────────────────────────
-function ModoSimpleTabs({ simple, setS, diasSlider, setDiasSlider, labelDias, simpleCompleto, loading, ejecutar }) {
-  const [tab, setTab] = useState("cultivo");
-
-  // Completitud por pestaña para mostrar el check
-  const okCultivo  = simple.tierra; // cultivo y etapa siempre tienen valor
-  const okEntorno  = simple.sol && simple.lluvia && simple.horasSol && simple.techo && simple.contenedor;
-  const okPlan     = simple.riegoHabitual;
-
-  const tabs = [
-    { id:"cultivo", label:"🌱 Cultivo",  ok: !!okCultivo  },
-    { id:"entorno", label:"🌤 Entorno",  ok: !!okEntorno  },
-    { id:"plan",    label:"📅 Plan",     ok: !!okPlan     },
+// ─── Comparador lateral ───────────────────────────────────
+function TablaComparacion({ resultados }) {
+  if (!resultados.maceta && !resultados.jardin) return null;
+  const filas = [
+    { k:"estado",      label:"Estado"       },
+    { k:"titulo",      label:"Diagnóstico"  },
   ];
-
   return (
-    <div className="space-y-3">
-      {/* Banner */}
-      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
-        <p className="text-sm font-bold text-emerald-800 mb-0.5">¡Bienvenido!</p>
-        <p className="text-xs text-emerald-700 leading-relaxed">
-          Responde las 3 secciones y te decimos si tu planta necesita agua.
-        </p>
+    <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div className="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+        <span>⚖️</span>
+        <p className="text-sm font-black text-gray-600">Comparación de escenarios</p>
       </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 py-2 px-1 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-1 ${
-              tab === t.id ? "bg-white text-emerald-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-            }`}>
-            <span>{t.label}</span>
-            {t.ok && <span className="text-emerald-500 text-xs">✓</span>}
-          </button>
+      <div className="grid grid-cols-3 divide-x divide-gray-100">
+        <div className="p-4 space-y-3">
+          {filas.map(f => <p key={f.k} className="text-xs font-bold text-gray-400 uppercase tracking-wider py-2">{f.label}</p>)}
+        </div>
+        {["maceta","jardin"].map(esc => (
+          <div key={esc} className="p-4 space-y-3">
+            <p className="text-xs font-black uppercase tracking-widest" style={{ color: THEME[esc].accent }}>
+              {THEME[esc].emoji} {esc}
+            </p>
+            {resultados[esc]
+              ? filas.map(f => {
+                  const val = resultados[esc][f.k];
+                  const style = f.k === "estado" ? ESTADO_STYLE[val] : null;
+                  return (
+                    <div key={f.k} className="py-1">
+                      {style
+                        ? <span className={`text-xs font-black px-2 py-1 rounded-full ${style.badge}`}>{style.icon} {val}</span>
+                        : <p className="text-xs text-gray-600 leading-relaxed">{val || "—"}</p>}
+                    </div>
+                  );
+                })
+              : <p className="text-xs text-gray-300 col-span-2 py-2">Sin predicción aún</p>}
+          </div>
         ))}
       </div>
-
-      {/* ── Tab: Cultivo ── */}
-      {tab === "cultivo" && (
-        <div className="space-y-3">
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-4">¿Qué estás cultivando?</p>
-            <SelectorCultivo valor={simple.cultivo} onChange={v=>setS("cultivo",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-4">¿En qué momento está tu cultivo?</p>
-            <SelectorEtapa valor={simple.etapa} onChange={v=>setS("etapa",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Cómo se ve y siente la tierra?</p>
-            <p className="text-xs text-gray-400 mb-4">Toca la tierra cerca de la raíz de tu planta</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.tierra)} valor={simple.tierra} onChange={v=>setS("tierra",v)}/>
-          </div>
-          <button onClick={() => setTab("entorno")}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black rounded-xl transition-all">
-            Siguiente: Entorno →
-          </button>
-        </div>
-      )}
-
-      {/* ── Tab: Entorno ── */}
-      {tab === "entorno" && (
-        <div className="space-y-3">
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Cómo está el clima hoy?</p>
-            <p className="text-xs text-gray-400 mb-4">Mira hacia afuera en este momento</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.sol)} valor={simple.sol} onChange={v=>setS("sol",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Ha llovido esta semana?</p>
-            <p className="text-xs text-gray-400 mb-4">Piensa en los últimos 7 días</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.lluvia)} valor={simple.lluvia} onChange={v=>setS("lluvia",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Cuánto tiempo recibe sol tu planta?</p>
-            <p className="text-xs text-gray-400 mb-4">Piensa en un día normal</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.horasSol)} valor={simple.horasSol} onChange={v=>setS("horasSol",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Tiene techo o está al aire libre?</p>
-            <p className="text-xs text-gray-400 mb-4">Afecta cuánta lluvia recibe y cuánto se seca</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.techo)} valor={simple.techo} onChange={v=>setS("techo",v)}/>
-          </div>
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Dónde está tu planta?</p>
-            <p className="text-xs text-gray-400 mb-4">Las macetas se secan más rápido que la tierra</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.contenedor)} valor={simple.contenedor} onChange={v=>setS("contenedor",v)}/>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setTab("cultivo")}
-              className="px-4 py-3 border border-gray-200 text-gray-500 text-sm font-bold rounded-xl hover:bg-gray-50 transition-all">
-              ← Atrás
-            </button>
-            <button onClick={() => setTab("plan")}
-              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black rounded-xl transition-all">
-              Siguiente: Plan →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Tab: Plan ── */}
-      {tab === "plan" && (
-        <div className="space-y-3">
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-1">¿Cuánto la sueles regar normalmente?</p>
-            <p className="text-xs text-gray-400 mb-4">¡No hay respuesta incorrecta!</p>
-            <OpcionVisual opciones={Object.keys(TRADUCCIONES.riegoHabitual)} valor={simple.riegoHabitual} onChange={v=>setS("riegoHabitual",v)}/>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <p className="text-base font-black text-gray-700 mb-4">¿Para cuántos días quieres el plan?</p>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">1 día</span>
-                <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">{labelDias}</span>
-                <span className="text-sm text-gray-400">1 mes</span>
-              </div>
-              <Slider label="" value={diasSlider} min={1} max={30} unit="" onChange={setDiasSlider}/>
-              <div className="flex gap-2 flex-wrap">
-                {[1,3,7,14,30].map(d => (
-                  <button key={d} onClick={() => setDiasSlider(d)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold border transition ${
-                      diasSlider===d ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-500 border-gray-200 hover:border-emerald-300"
-                    }`}>
-                    {d===1?"Hoy":d===7?"1 sem":d===14?"2 sem":d===30?"1 mes":`${d}d`}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Resumen de lo que falta si no está completo */}
-          {!simpleCompleto && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-              <p className="text-xs font-bold text-amber-700 mb-1">⚠️ Aún faltan respuestas en:</p>
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  !simple.tierra         && { tab:"cultivo", label:"Estado de la tierra" },
-                  !simple.sol            && { tab:"entorno", label:"Clima de hoy"         },
-                  !simple.lluvia         && { tab:"entorno", label:"Si llovió"            },
-                  !simple.horasSol       && { tab:"entorno", label:"Horas de sol"         },
-                  !simple.techo          && { tab:"entorno", label:"Si tiene techo"       },
-                  !simple.contenedor     && { tab:"entorno", label:"Dónde está la planta" },
-                  !simple.riegoHabitual  && { tab:"plan",    label:"Cuánto riegas"        },
-                ].filter(Boolean).map((item, i) => (
-                  <button key={i} onClick={() => setTab(item.tab)}
-                    className="text-xs bg-white border border-amber-300 text-amber-700 px-2 py-1 rounded-lg font-semibold hover:bg-amber-100 transition">
-                    {item.label} →
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button onClick={() => setTab("entorno")}
-              className="px-4 py-3 border border-gray-200 text-gray-500 text-sm font-bold rounded-xl hover:bg-gray-50 transition-all">
-              ← Atrás
-            </button>
-            <button onClick={() => ejecutar()} disabled={loading || !simpleCompleto}
-              className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-40 text-white text-sm font-black rounded-xl transition-all shadow-md shadow-emerald-100">
-              {loading ? "Analizando..." : !simpleCompleto ? "Completa los pasos faltantes" : `🔍 Analizar — ${labelDias}`}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// ─── Componente principal ─────────────────────────────────
-export default function SimuladorRiego() {
-  const [modo, setModo] = useState("simple");
-  const [diasSlider, setDiasSlider] = useState(7);
-
-  const [simple, setSimple] = useState({
-    cultivo:"lechuga", etapa:"desarrollo",
-    tierra:"", sol:"", lluvia:"",
-    horasSol:"", techo:"", contenedor:"", riegoHabitual:"",
-  });
-  const [tecnico, setTecnico] = useState({
-    radiacion:500, humedadSuelo:55, precipitacion:3,
-    temperatura:22, cultivo:"lechuga", etapa:"desarrollo",
-    riegoAplicado:0, horasSol:6, techo:"abierto",
-    contenedor:"tierra", riegoHabitual:"normal",
-  });
-
-  const [sim, setSim]         = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-
-  const setS = (k, v) => setSimple(p => ({ ...p, [k]: v }));
-  const setT = (k, v) => setTecnico(p => ({ ...p, [k]: v }));
-
-  const traducirSimple = () => ({
-    cultivo:       simple.cultivo,
-    etapa:         simple.etapa,
-    humedadSuelo:  (TRADUCCIONES.tierra[simple.tierra]        || {humedadSuelo:50}).humedadSuelo,
-    radiacion:     (TRADUCCIONES.sol[simple.sol]              || {radiacion:500}).radiacion,
-    temperatura:   (TRADUCCIONES.sol[simple.sol]              || {temperatura:22}).temperatura,
-    precipitacion: (TRADUCCIONES.lluvia[simple.lluvia]        || {precipitacion:3}).precipitacion,
-    horasSol:      (TRADUCCIONES.horasSol[simple.horasSol]    || {horasSol:6}).horasSol,
-    techo:         (TRADUCCIONES.techo[simple.techo]          || {techo:"abierto"}).techo,
-    contenedor:    (TRADUCCIONES.contenedor[simple.contenedor]|| {contenedor:"tierra"}).contenedor,
-    riegoHabitual: (TRADUCCIONES.riegoHabitual[simple.riegoHabitual] || {riegoHabitual:"normal"}).riegoHabitual,
-    riegoAplicado: 0,
-    dias: diasSlider,
-  });
-
-  const ejecutar = async (overrides = {}) => {
-    setLoading(true);
-    setError(null);
-    const payload = modo === "simple"
-      ? { ...traducirSimple(), ...overrides }
-      : { ...tecnico, ...overrides, dias: diasSlider };
-    try {
-      const res  = await fetch(`${API_URL}/simular`, {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error en la API");
-      setSim(data);
-    } catch (e) {
-      setError(e.message.includes("fetch") || e.message.includes("Failed")
-        ? "No se pudo conectar con la API Flask. Asegúrate de que esté corriendo en localhost:5000"
-        : e.message);
-    } finally { setLoading(false); }
-  };
-
-  const escenario = (tipo) => {
-    const ov = tipo==="riego"?{riegoAplicado:10}:tipo==="sequia"?{precipitacion:0,riegoAplicado:0}:{radiacion:820};
-    if (modo==="tecnico") setTecnico(p=>({...p,...ov}));
-    ejecutar(ov);
-  };
-
-  const simpleCompleto = simple.tierra && simple.sol && simple.lluvia &&
-    simple.horasSol && simple.techo && simple.contenedor && simple.riegoHabitual;
-
-  const ST = {
-    critico:{ bg:"bg-red-50",     border:"border-red-200",     pill:"bg-red-100 text-red-700",         dot:"bg-red-500",     text:"text-red-700",     bar:"#ef4444", metricColor:"rose"    },
-    alerta: { bg:"bg-amber-50",   border:"border-amber-200",   pill:"bg-amber-100 text-amber-700",     dot:"bg-amber-500",   text:"text-amber-700",   bar:"#f59e0b", metricColor:"amber"   },
-    optimo: { bg:"bg-emerald-50", border:"border-emerald-200", pill:"bg-emerald-100 text-emerald-700", dot:"bg-emerald-500", text:"text-emerald-700", bar:"#10b981", metricColor:"emerald" },
-  };
-  const st = sim ? ST[sim.estado] : null;
-
-  // Label amigable para el slider de días
-  const labelDias = diasSlider === 1 ? "Solo hoy" : diasSlider <= 3 ? `${diasSlider} días` :
-    diasSlider === 7 ? "1 semana" : diasSlider === 14 ? "2 semanas" :
-    diasSlider === 30 ? "1 mes" : `${diasSlider} días`;
+// ─── App principal ────────────────────────────────────────
+export default function SimuladorEscenarios() {
+  const [activeTab, setActiveTab] = useState("ambos"); // "ambos" | "maceta" | "jardin"
+  const [resultados, setResultados] = useState({ maceta: null, jardin: null });
 
   return (
-    <div className="min-h-screen bg-white">
-
+    <div className="min-h-screen bg-gray-50 font-sans">
       {/* Header */}
-      <div className="border-b border-gray-100 bg-white sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-screen-xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white">🌿</div>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white text-lg shadow-sm">🌿</div>
             <div>
-              <h1 className="text-sm font-black text-gray-800 tracking-tight">Simulador de Riego</h1>
-              <p className="text-xs text-gray-400">Balance hídrico · Evapotranspiración</p>
+              <h1 className="text-sm font-black text-gray-800 tracking-tight">Simulador por Escenarios</h1>
+              <p className="text-xs text-gray-400">Modelo MLP · Variables del dataset · ISP</p>
             </div>
           </div>
-          {/* Toggle modo */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+
+          {/* Tabs de vista */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             {[
-              { id:"simple",  label:"🌱 Modo Simple",  sub:"Para cualquier persona" },
-              { id:"tecnico", label:"🔬 Modo Técnico", sub:"Con datos precisos"      },
-            ].map(m => (
-              <button key={m.id} onClick={() => { setModo(m.id); setSim(null); setError(null); }}
-                className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex flex-col items-center ${
-                  modo===m.id ? "bg-white text-emerald-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                }`}>
-                <span>{m.label}</span>
-                <span className="font-normal opacity-60 text-xs">{m.sub}</span>
+              { id:"ambos",  label:"🪴🌳 Ambos"   },
+              { id:"maceta", label:"🪴 Maceta"    },
+              { id:"jardin", label:"🌳 Jardín"    },
+            ].map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`px-4 py-2 rounded-lg text-xs font-black transition-all
+                  ${activeTab === t.id ? "bg-white text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"}`}>
+                {t.label}
               </button>
             ))}
           </div>
-          {modo==="tecnico" && (
-            <div className="flex gap-2">
-              {[
-                {id:"riego",     label:"＋ Riego 10mm",    cls:"bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"   },
-                {id:"sequia",    label:"☀ Sin lluvia",      cls:"bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200"},
-                {id:"radiacion", label:"🔆 Alta radiación", cls:"bg-red-50 text-red-700 hover:bg-red-100 border-red-200"       },
-              ].map(e => (
-                <button key={e.id} onClick={() => escenario(e.id)} disabled={loading}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition disabled:opacity-40 ${e.cls}`}>
-                  {e.label}
-                </button>
-              ))}
-            </div>
-          )}
+
+          <div className="text-xs text-gray-400 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"/>
+            {API_URL.replace("https://","").split(".")[0]}
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Body */}
+      <div className="max-w-screen-xl mx-auto px-6 py-6 space-y-5">
 
-        {/* ── MODO SIMPLE — TABS ── */}
-        {modo==="simple" && (
-          <ModoSimpleTabs
-            simple={simple} setS={setS}
-            diasSlider={diasSlider} setDiasSlider={setDiasSlider}
-            labelDias={labelDias} simpleCompleto={simpleCompleto}
-            loading={loading} ejecutar={ejecutar}
-          />
-        )}
+        {/* Grid de escenarios */}
+        <div className={`grid gap-5 ${activeTab === "ambos" ? "grid-cols-2" : "grid-cols-1 max-w-2xl mx-auto"}`}
+          style={{ height: activeTab === "ambos" ? "calc(100vh - 180px)" : "auto", minHeight: 600 }}>
+          {(activeTab === "ambos" || activeTab === "maceta") && (
+            <PanelEscenario escenario="maceta"/>
+          )}
+          {(activeTab === "ambos" || activeTab === "jardin") && (
+            <PanelEscenario escenario="jardin"/>
+          )}
+        </div>
 
-        {/* ── MODO TÉCNICO ── 
-        {modo==="tecnico" && (
-          <div className="space-y-4">
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Cultivo</p>
-              <div className="space-y-4">
-                <SelectBasico label="Tipo de cultivo" value={tecnico.cultivo} onChange={v=>setT("cultivo",v)}
-                  options={CULTIVOS.map(c=>({value:c.value,label:`${c.emoji} ${c.label}`}))}/>
-                <SelectBasico label="Etapa" value={tecnico.etapa} onChange={v=>setT("etapa",v)}
-                  options={ETAPAS.map(e=>({value:e.value,label:`${e.emoji} ${e.label}`}))}/>
-              </div>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Clima</p>
-              <div className="space-y-5">
-                <Slider label="Temperatura" value={tecnico.temperatura} min={15} max={38} unit="°C" onChange={v=>setT("temperatura",v)}/>
-                <Slider label="Radiación solar" value={tecnico.radiacion} min={100} max={900} step={10} unit=" W/m²" onChange={v=>setT("radiacion",v)}/>
-                <Slider label="Horas de sol" value={tecnico.horasSol} min={1} max={12} unit="h" onChange={v=>setT("horasSol",v)}/>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Precipitación diaria</span>
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{tecnico.precipitacion} mm</span>
-                  </div>
-                  <input type="number" min={0} max={50} value={tecnico.precipitacion}
-                    onChange={e=>setT("precipitacion",Number(e.target.value))}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400"/>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Suelo y entorno</p>
-              <div className="space-y-5">
-                <Slider label="Humedad inicial" value={tecnico.humedadSuelo} min={10} max={90} unit="%" onChange={v=>setT("humedadSuelo",v)}/>
-                <Slider label="Riego adicional" value={tecnico.riegoAplicado} min={0} max={30} unit=" mm" onChange={v=>setT("riegoAplicado",v)}/>
-                <SelectBasico label="Techo / exposición" value={tecnico.techo} onChange={v=>setT("techo",v)}
-                  options={[{value:"abierto",label:"☀️ A cielo abierto"},{value:"semitecho",label:"⛅ Semitecho"},{value:"techo",label:"🏠 Bajo techo"}]}/>
-                <SelectBasico label="Tipo de contenedor" value={tecnico.contenedor} onChange={v=>setT("contenedor",v)}
-                  options={[{value:"tierra",label:"🌱 Tierra directa"},{value:"maceta_grande",label:"🪣 Maceta grande"},{value:"maceta_chica",label:"🪴 Maceta chica"}]}/>
-                <SelectBasico label="Hábito de riego" value={tecnico.riegoHabitual} onChange={v=>setT("riegoHabitual",v)}
-                  options={[{value:"poco",label:"💧 Poco"},{value:"normal",label:"💧💧 Normal"},{value:"abundante",label:"💧💧💧 Abundante"}]}/>
-              </div>
-            </div>
+        {/* Comparación (solo en vista ambos) */}
+        {activeTab === "ambos" && <TablaComparacion resultados={resultados}/>}
 
-            {/* Días 
-            <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">Días a simular</p>
-              <Slider label="" value={diasSlider} min={1} max={30} unit=" días" onChange={setDiasSlider}/>
-              <div className="flex gap-2 flex-wrap mt-3">
-                {[1,3,7,14,30].map(d => (
-                  <button key={d} onClick={() => setDiasSlider(d)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold border transition ${
-                      diasSlider===d ? "bg-emerald-600 text-white border-emerald-600" : "bg-gray-50 text-gray-500 border-gray-200 hover:border-emerald-300"
-                    }`}>
-                    {d===1?"Hoy":d===7?"1 sem":d===14?"2 sem":d===30?"1 mes":`${d}d`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button onClick={() => ejecutar()} disabled={loading}
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white text-sm font-black rounded-xl transition-all shadow-md shadow-emerald-100">
-              {loading ? "Consultando API..." : `▶ Simular — ${labelDias}`}
-            </button>
+        {/* Info del modelo */}
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-xs text-gray-400 flex items-start gap-4">
+          <span className="text-2xl shrink-0">ℹ️</span>
+          <div className="space-y-1">
+            <p className="font-black text-gray-600">Sobre el modelo</p>
+            <p>Las predicciones se generan con un <strong className="text-gray-600">MLPRegressor</strong> entrenado sobre el dataset de hortalizas de ciclo corto (10.000 registros). El modelo predice el <strong className="text-gray-600">ISP (Índice de Salud de la Planta)</strong> como valor continuo 0–1, que se clasifica según los umbrales: ISP ≥ 0.55 → Bueno · ISP ≥ 0.30 → Regular · ISP &lt; 0.30 → Malo.</p>
+            <p className="mt-1">Variables de entrada: Temperatura · Humedad · pH del suelo · Luz solar · Precipitación · Altitud · Tipo de suelo · Tipo de irrigación · Fertilizantes · Presencia de plagas · Tipo de cultivo.</p>
           </div>
-        )}*/}
-
-        {/* Panel derecho — resultados */}
-        <div className="lg:col-span-2 space-y-5">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700 flex items-start gap-3">
-              <span className="text-lg">⚠️</span>
-              <div>
-                <p className="font-bold mb-0.5">Error al conectar con la API</p>
-                <p className="text-red-500">{error}</p>
-                <p className="text-xs text-red-400 mt-1 font-mono">python app.py → https://backend-modelo-gmfn.onrender.com</p>
-              </div>
-            </div>
-          )}
-
-          {!sim && !error && (
-            <div className="h-full min-h-96 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-2xl p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center text-3xl mb-4">
-                {modo==="simple" ? "🌱" : "💧"}
-              </div>
-              <h3 className="text-base font-black text-gray-300 mb-2">
-                {modo==="simple" ? "Responde los pasos del panel izquierdo" : "Configura y ejecuta"}
-              </h3>
-              <p className="text-sm text-gray-300 max-w-xs leading-relaxed">
-                {modo==="simple"
-                  ? "No necesitas saber de agricultura. Solo observa tu cultivo y responde lo que ves."
-                  : "Ajusta las variables técnicas y presiona el botón para simular."}
-              </p>
-            </div>
-          )}
-
-          {sim && st && <Resultados sim={sim} st={st} />}
         </div>
       </div>
     </div>
