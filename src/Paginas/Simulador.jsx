@@ -22,15 +22,29 @@ const DEFAULTS = {
     Luz_Solar: 8,   Precipitacion: 20, Altitud: 500,
     Tipo_Suelo: "Mixto", Tipo_Irrigacion: "Goteo",
     Uso_Fertilizantes: "Organicos", Presencia_Plagas_Enfermedades: "No",
-    Tipo_Producto: "Lechuga",
+    Tipo_Producto: "Lechuga", tamano_maceta: "mediana",
   },
   jardin: {
     Temperatura: 20, Humedad: 60, pH_Suelo: 6.8,
     Luz_Solar: 10,  Precipitacion: 55, Altitud: 1200,
     Tipo_Suelo: "Mixto", Tipo_Irrigacion: "Aspersion",
     Uso_Fertilizantes: "Organicos", Presencia_Plagas_Enfermedades: "No",
-    Tipo_Producto: "Tomate",
+    Tipo_Producto: "Tomate", tamano_maceta: "jardin",
   },
+};
+
+// Metadatos de tamaños de maceta (para UI y validaciones)
+const TAMANOS_MACETA = [
+  { id:"chica",   label:"Chica",   vol:"≤ 3L",   desc:"Hierbas, lechuga, espinaca",               factor:1.7  },
+  { id:"mediana", label:"Mediana", vol:"5–15L",  desc:"Tomate cherry, pimientos, cebolla",         factor:1.35 },
+  { id:"grande",  label:"Grande",  vol:"20–30L", desc:"Tomate, zanahoria, papa, frijol",           factor:1.15 },
+];
+
+// Cultivos no viables por tamaño (mostrar advertencia)
+const NO_VIABLE = {
+  chica:   ["Maiz","Trigo","Papa","Zanahoria"],
+  mediana: ["Maiz","Trigo"],
+  grande:  ["Maiz","Trigo"],
 };
 
 const RANGOS = {
@@ -208,9 +222,9 @@ function PanelEscenario({ escenario }) {
   }, []);
 
   const ejecutar = useCallback(() => {
-    predecir({ ...vars, dias: 1 });
+    predecir({ ...vars, escenario, tamano_maceta: vars.tamano_maceta || (escenario === "maceta" ? "mediana" : "jardin"), dias: 1 });
     setDirty(false);
-  }, [vars, predecir]);
+  }, [vars, predecir, escenario]);
 
   const resetear = () => { setVars({ ...DEFAULTS[escenario] }); setDirty(true); };
 
@@ -264,17 +278,64 @@ function PanelEscenario({ escenario }) {
               Cultivo
             </p>
             <div className="grid grid-cols-2 gap-1.5">
-              {CULTIVOS.map(c => (
-                <button key={c.v} onClick={() => setVar("Tipo_Producto", c.v)}
-                  className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold border transition-all"
-                  style={vars.Tipo_Producto === c.v
-                    ? { backgroundColor: theme.accent+"22", borderColor: theme.accent, color: theme.dark }
-                    : { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#6b7280" }}>
-                  <span>{c.e}</span><span>{c.v}</span>
-                </button>
-              ))}
+              {CULTIVOS.map(c => {
+                const noViable = escenario === "maceta" && vars.tamano_maceta &&
+                  (NO_VIABLE[vars.tamano_maceta] || []).includes(c.v);
+                return (
+                  <button key={c.v} onClick={() => setVar("Tipo_Producto", c.v)}
+                    className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold border transition-all relative"
+                    style={vars.Tipo_Producto === c.v
+                      ? { backgroundColor: theme.accent+"22", borderColor: theme.accent, color: theme.dark }
+                      : noViable
+                        ? { backgroundColor: "#fef2f2", borderColor: "#fca5a5", color: "#ef4444" }
+                        : { backgroundColor: "#f9fafb", borderColor: "#e5e7eb", color: "#6b7280" }}>
+                    <span>{c.e}</span><span>{c.v}</span>
+                    {noViable && <span className="ml-auto text-xs">⚠️</span>}
+                  </button>
+                );
+              })}
             </div>
+            {escenario === "maceta" && vars.tamano_maceta && (NO_VIABLE[vars.tamano_maceta] || []).includes(vars.Tipo_Producto) && (
+              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 leading-relaxed">
+                ⚠️ <strong>{vars.Tipo_Producto}</strong> no es viable en maceta {vars.tamano_maceta}. Tiene raíces muy profundas o crece demasiado alto.
+              </div>
+            )}
           </div>
+
+          {/* Tamaño de maceta — solo en escenario maceta */}
+          {escenario === "maceta" && (
+            <div className="p-5 space-y-3 border-b" style={{ borderColor: theme.mid + "22" }}>
+              <p className="text-xs font-black uppercase tracking-widest" style={{ color: theme.dark }}>
+                Tamaño de maceta
+              </p>
+              <div className="space-y-1.5">
+                {TAMANOS_MACETA.map(t => (
+                  <button key={t.id} onClick={() => setVar("tamano_maceta", t.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all"
+                    style={vars.tamano_maceta === t.id
+                      ? { backgroundColor: theme.accent+"18", borderColor: theme.accent }
+                      : { backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }}>
+                    <span className="text-lg">🪴</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-black" style={{ color: vars.tamano_maceta === t.id ? theme.dark : "#374151" }}>
+                        {t.label} <span className="font-normal text-gray-400">({t.vol})</span>
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">{t.desc}</p>
+                    </div>
+                    {vars.tamano_maceta === t.id && (
+                      <span className="text-xs font-black shrink-0" style={{ color: theme.accent }}>✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-700 leading-relaxed">
+                💧 Las macetas se secan {
+                  vars.tamano_maceta === "chica" ? "~70%" :
+                  vars.tamano_maceta === "mediana" ? "~35%" : "~15%"
+                } más rápido que la tierra. Revisa la humedad del sustrato a diario.
+              </div>
+            </div>
+          )}
 
           {/* Variables categóricas */}
           <div className="p-5 space-y-4">
@@ -349,6 +410,22 @@ function PanelEscenario({ escenario }) {
                 )}
               </div>
 
+              {/* Alertas de maceta (si aplica) */}
+              {resultado.diagnostico?.alertas_maceta?.length > 0 && (
+                <div className="space-y-2">
+                  {resultado.diagnostico.alertas_maceta.map((alerta, i) => (
+                    <div key={i} className={`rounded-xl px-4 py-3 text-sm leading-relaxed border ${
+                      alerta.nivel === "critico"     ? "bg-red-50 border-red-200 text-red-800" :
+                      alerta.nivel === "advertencia" ? "bg-amber-50 border-amber-200 text-amber-800" :
+                      alerta.nivel === "info"        ? "bg-blue-50 border-blue-200 text-blue-800" :
+                                                       "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    }`}>
+                      {alerta.texto}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Radar de variables normalizadas */}
               <div className="rounded-2xl border p-4 bg-white" style={{ borderColor: theme.mid + "44" }}>
                 <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: theme.dark }}>
@@ -357,41 +434,63 @@ function PanelEscenario({ escenario }) {
                 <RadarVariables vars={vars} escenario={escenario}/>
               </div>
 
-              {/* Métricas rápidas */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label:"Temperatura",   valor:`${vars.Temperatura}°C`,      icon:"🌡" },
-                  { label:"Luz solar",     valor:`${vars.Luz_Solar}h`,         icon:"☀️" },
-                  { label:"pH suelo",      valor:vars.pH_Suelo.toFixed(1),     icon:"🧪" },
-                  { label:"Humedad",       valor:`${vars.Humedad}%`,           icon:"💧" },
-                  { label:"Precipitación", valor:`${vars.Precipitacion}mm`,    icon:"🌧" },
-                  { label:"Altitud",       valor:`${vars.Altitud}m`,           icon:"⛰" },
-                ].map(m => (
-                  <div key={m.label} className="rounded-xl p-3 text-center border bg-gray-50 border-gray-100">
-                    <p className="text-lg">{m.icon}</p>
-                    <p className="text-sm font-black text-gray-700 tabular-nums">{m.valor}</p>
-                    <p className="text-xs text-gray-400 leading-tight">{m.label}</p>
+              {/* Diagnóstico variable por variable */}
+              {resultado.diagnostico && (
+                <div className="rounded-2xl border bg-white overflow-hidden" style={{ borderColor: theme.mid + "44" }}>
+                  <div className="px-4 py-3 border-b flex items-center justify-between"
+                    style={{ borderColor: theme.mid + "33", backgroundColor: theme.light + "88" }}>
+                    <p className="text-xs font-black uppercase tracking-widest" style={{ color: theme.dark }}>
+                      🔬 Diagnóstico por variable
+                    </p>
+                    {resultado.diagnostico.n_problemas > 0 && (
+                      <span className="text-xs font-black bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                        {resultado.diagnostico.n_problemas} {resultado.diagnostico.n_problemas === 1 ? "problema" : "problemas"}
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
-
-              {/* Recomendación si la hay */}
-              {resultado.recomendacion && (
-                <div className="rounded-2xl p-4 border" style={{ backgroundColor: theme.light, borderColor: theme.mid + "66" }}>
-                  <p className="text-xs font-black uppercase tracking-widest mb-2" style={{ color: theme.dark }}>💬 Recomendación</p>
-                  <p className="text-sm text-gray-700 leading-relaxed">{resultado.recomendacion}</p>
+                  <div className="p-4 space-y-2">
+                    {/* Problemas detectados */}
+                    {resultado.diagnostico.problemas?.map((p, i) => (
+                      <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 border border-red-100">
+                        <span className="shrink-0 mt-0.5 text-base">{p.split(" ")[0]}</span>
+                        <p className="text-xs text-red-800 leading-relaxed">{p.split(" ").slice(1).join(" ")}</p>
+                      </div>
+                    ))}
+                    {/* Cosas que están bien */}
+                    {resultado.diagnostico.positivos?.length > 0 && (
+                      <details className="group">
+                        <summary className="text-xs text-gray-400 cursor-pointer select-none py-1 hover:text-gray-600 list-none flex items-center gap-1">
+                          <span className="group-open:hidden">▶</span>
+                          <span className="hidden group-open:inline">▼</span>
+                          Ver {resultado.diagnostico.positivos.length} variables en rango óptimo
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
+                          {resultado.diagnostico.positivos.map((p, i) => (
+                            <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
+                              <p className="text-xs text-emerald-800 leading-relaxed">{p}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                    {resultado.diagnostico.n_problemas === 0 && resultado.diagnostico.problemas?.length === 0 && (
+                      <p className="text-xs text-emerald-700 text-center py-2">
+                        ✅ Todas las variables están dentro del rango óptimo para este cultivo.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* Pasos si los hay */}
+              {/* Pasos de acción */}
               {resultado.pasos?.length > 0 && (
                 <div className="rounded-2xl p-4 border bg-white" style={{ borderColor: theme.mid + "44" }}>
-                  <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: theme.dark }}>✅ Acciones sugeridas</p>
+                  <p className="text-xs font-black uppercase tracking-widest mb-3" style={{ color: theme.dark }}>Acciones sugeridas</p>
                   <div className="space-y-2">
                     {resultado.pasos.map((paso, i) => (
-                      <div key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                      <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-gray-50 text-sm text-gray-700">
                         <span className="shrink-0">{paso.split(" ")[0]}</span>
-                        <span className="leading-relaxed">{paso.split(" ").slice(1).join(" ")}</span>
+                        <span className="leading-relaxed text-xs">{paso.split(" ").slice(1).join(" ")}</span>
                       </div>
                     ))}
                   </div>
