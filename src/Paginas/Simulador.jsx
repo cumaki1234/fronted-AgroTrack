@@ -234,9 +234,15 @@ function PanelEscenario({ escenario }) {
   const cultivoEmoji = Object.fromEntries(CULTIVOS.map(c => [c.v, c.e]));
 
   return (
+    
     <div className="flex flex-col h-full rounded-2xl overflow-hidden border"
       style={{ borderColor: theme.mid + "66", boxShadow:`0 4px 32px 0 ${theme.accent}18` }}>
-{/* Info del modelo */}
+
+      {/* Header */}
+      <div className="px-6 py-4 flex items-center justify-between shrink-0"
+      
+        style={{ background:`linear-gradient(135deg, ${theme.light}, white)`, borderBottom:`1px solid ${theme.mid}33` }}>
+          {/* Info del modelo */}
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-xs text-gray-400 flex items-start gap-4">
           <span className="text-2xl shrink-0">ℹ️</span>
           <div className="space-y-1">
@@ -245,10 +251,6 @@ function PanelEscenario({ escenario }) {
             <p className="mt-1">Variables de entrada: Temperatura · Humedad · pH del suelo · Luz solar · Precipitación · Altitud · Tipo de suelo · Tipo de irrigación · Fertilizantes · Presencia de plagas · Tipo de cultivo.</p>
           </div>
         </div>
-      {/* Header */}
-      <div className="px-6 py-4 flex items-center justify-between shrink-0"
-      
-        style={{ background:`linear-gradient(135deg, ${theme.light}, white)`, borderBottom:`1px solid ${theme.mid}33` }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl"
             style={{ backgroundColor: theme.accent + "22" }}>{theme.emoji}</div>
